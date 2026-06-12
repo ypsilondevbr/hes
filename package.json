@@ -9,8 +9,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "vercel-build": "npm run build && node -e \"require('fs').mkdirSync('api',{recursive:true}); require('fs').copyFileSync('dist/server/server.js','api/index.js');\""
+    "format": "prettier --write ."
+   
   },
   "engines": {
     "node": ">=22.12.0"
