@@ -301,19 +301,76 @@ vol.oninput=()=>audio.volume=Number(vol.value);
 let ac;function beep(f=520,d=.1,type='sine',v=.12){try{ac=ac||new (AudioContext||webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.value=f;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(v,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);o.start();o.stop(ac.currentTime+d)}catch(e){}}
 
 /* ===== modal ===== */
-const modal=document.getElementById('modal'),mTitle=document.getElementById('mTitle'),mBody=document.getElementById('mBody');let cleanup=null;
-function openModal(title,builder){if(cleanup)try{cleanup()}catch(e){}cleanup=null;mTitle.textContent=title;mBody.innerHTML='';modal.classList.add('open');cleanup=builder(mBody)||null}
-function closeModal(){modal.classList.remove('open');if(cleanup)try{cleanup()}catch(e){}cleanup=null;mBody.innerHTML=''}
-document.getElementById('mClose').onclick=closeModal;
-modal.addEventListener('click',e=>{if(e.target===modal)closeModal()});
-document.querySelectorAll('[data-game]').forEach(b=>b.onclick=()=>games[b.dataset.game]());
+const modal=document.getElementById('modal'),mTitle=document.getElementById('mTitle'),mBody=document.getElementById('mBody'),mClose=document.getElementById('mClose');
+let cleanup = null;
+let lastFocusedElement = null;
+function openModal(title, builder) {
+  if (cleanup) {
+    try {
+      cleanup();
+    } catch (e) {}
+    cleanup = null;
+  }
+  lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  mTitle.textContent = title;
+  mBody.innerHTML = '';
+  modal.classList.add('open');
+  cleanup = builder(mBody) || null;
+  mClose?.focus?.();
+}
+function closeModal() {
+  modal.classList.remove('open');
+  if (cleanup) {
+    try {
+      cleanup();
+    } catch (e) {}
+    cleanup = null;
+  }
+  mBody.innerHTML = '';
+  if (lastFocusedElement) lastFocusedElement.focus();
+}
+mClose?.addEventListener('click', closeModal);
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+document.querySelectorAll('[data-game]').forEach((b) => {
+  const gameId = b.dataset.game;
+  if (!gameId || typeof games[gameId] !== 'function') return;
+  b.addEventListener('click', () => games[gameId]());
+});
 
-function tutorial(body,{i,title,text,start}){body.innerHTML=`<div class="tutorial"><div class="tutorial-icon">${icon(i,40)}</div><h3>${title}</h3><p>${text}</p></div><div class="btns"><button class="btn" id="start">${icon('play',18)} começar</button></div>`;body.querySelector('#start').onclick=start}
-function result(body,{won,title,msg,retry,cont}){if(won)celebrate();body.innerHTML=`<div class="result"><div class="big-icon">${icon(won?'win':'lose',40)}</div><h3>${title}</h3><p>${msg}</p></div><div class="btns ${won?'':'row'}"><button class="btn good" id="retry">${icon('retry',18)} tentar de novo</button>${won?'':`<button class="btn ghost" id="cont">${icon('skip',18)} continuar mesmo assim</button>`}</div>`;body.querySelector('#retry').onclick=retry;if(!won)body.querySelector('#cont').onclick=cont;beep(won?880:220,.24,'triangle',.12)}
+function tutorial(body, { i, title, text, start }) {
+  body.innerHTML = `<div class="tutorial"><div class="tutorial-icon">${icon(i, 40)}</div><h3>${title}</h3><p>${text}</p></div><div class="btns"><button type="button" class="btn" id="start">${icon('play', 18)} começar</button></div>`;
+  body.querySelector('#start').onclick = start;
+}
+function result(body, { won, title, msg, retry, cont }) {
+  if (won) celebrate();
+  body.innerHTML = `<div class="result"><div class="big-icon">${icon(won ? 'win' : 'lose', 40)}</div><h3>${title}</h3><p>${msg}</p></div><div class="btns ${won ? '' : 'row'}"><button type="button" class="btn good" id="retry">${icon('retry', 18)} tentar de novo</button>${won ? '' : `<button type="button" class="btn ghost" id="cont">${icon('skip', 18)} continuar mesmo assim</button>`}</div>`;
+  body.querySelector('#retry').onclick = retry;
+  if (!won) body.querySelector('#cont').onclick = cont;
+  beep(won ? 880 : 220, .24, 'triangle', .12);
+}
 
 /* ===== best scores ===== */
-const LS={get:(k)=>Number(localStorage.getItem('hesadora_'+k)||0),set:(k,v)=>localStorage.setItem('hesadora_'+k,String(v)),best:(k,v)=>{const c=Math.max(LS.get(k),Number(v)||0);LS.set(k,c);refreshBest();return c}};
-function refreshBest(){document.getElementById('bestTower').textContent='melhor: '+LS.get('tower_best');document.getElementById('bestQuiz').textContent='melhor: '+LS.get('quiz_best');document.getElementById('bestSpeed').textContent='melhor: '+LS.get('speed_best')}
+const LS = {
+  get: (k) => {
+    const value = Number(localStorage.getItem('hesadora_' + k));
+    return Number.isFinite(value) ? value : 0;
+  },
+  set: (k, v) => localStorage.setItem('hesadora_' + k, String(v)),
+  best: (k, v) => {
+    const current = LS.get(k);
+    const next = Number(v) || 0;
+    const c = Math.max(current, next);
+    LS.set(k, c);
+    refreshBest();
+    return c;
+  },
+};
+function refreshBest() {
+  document.getElementById('bestTower').textContent = 'melhor: ' + LS.get('tower_best');
+  document.getElementById('bestQuiz').textContent = 'melhor: ' + LS.get('quiz_best');
+  document.getElementById('bestSpeed').textContent = 'melhor: ' + LS.get('speed_best');
+}
 refreshBest();
 
 /* ===== games ===== */
@@ -337,7 +394,25 @@ games.quiz=()=>openModal('quiz do amor',body=>{
     const q=Q[i];
     body.innerHTML=`<div class="q-step">PERGUNTA ${i+1}/${Q.length}</div><h3 class="q-text">${q.q}</h3><div id="opts"></div>`;
     const opts=body.querySelector('#opts');
-    q.opts.forEach((o,idx)=>{const b=document.createElement('button');b.className='opt';b.textContent=o;b.onclick=()=>{const ok=idx===q.c;b.classList.add(ok?'right':'wrong');if(ok)score++;else opts.children[q.c].classList.add('right');[...opts.children].forEach(x=>x.disabled=true);beep(ok?720:190,.13,'triangle',.1);setTimeout(()=>{i++;render()},760)};opts.appendChild(b)})
+    q.opts.forEach((o, idx) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'opt';
+      b.textContent = o;
+      b.onclick = () => {
+        const ok = idx === q.c;
+        b.classList.add(ok ? 'right' : 'wrong');
+        if (ok) score++;
+        else opts.children[q.c].classList.add('right');
+        [...opts.children].forEach((x) => (x.disabled = true));
+        beep(ok ? 720 : 190, .13, 'triangle', .1);
+        setTimeout(() => {
+          i++;
+          render();
+        }, 760);
+      };
+      opts.appendChild(b);
+    })
   };
   tutorial(body,{i:'heart',title:'quiz rapidinho',text:'5 perguntas. acerte tudo e ganhe os fogos.',start:render})
 });
@@ -414,7 +489,19 @@ games.decorate=()=>openModal('decore a foto',body=>{
   const start=()=>{count=0;
     body.innerHTML=`<div class="dec-stage" id="decStage"><img class="bg" src="/media/photo1.png" alt="foto" /></div><div class="palette" id="palette"></div><div class="btns row" style="margin-top:10px"><button class="btn ghost" id="undo">${icon('retry',18)} desfazer</button><button class="btn good" id="done">${icon('win',18)} finalizar</button></div>`;
     stage=body.querySelector('#decStage');const pal=body.querySelector('#palette');
-    stickers.forEach((s,idx)=>{const b=document.createElement('button');b.innerHTML=s.type==='img'?`<img src="${s.src}" alt="">`:s.ch;if(idx===chosen)b.classList.add('active');b.onclick=()=>{chosen=idx;[...pal.children].forEach(x=>x.classList.remove('active'));b.classList.add('active');beep(880,.04,'sine',.06)};pal.appendChild(b)});
+    stickers.forEach((s, idx) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = s.type === 'img' ? `<img src="${s.src}" alt="">` : s.ch;
+      if (idx === chosen) b.classList.add('active');
+      b.onclick = () => {
+        chosen = idx;
+        [...pal.children].forEach((x) => x.classList.remove('active'));
+        b.classList.add('active');
+        beep(880, .04, 'sine', .06);
+      };
+      pal.appendChild(b);
+    });
     function place(e){const r=stage.getBoundingClientRect(),t=e.touches?e.touches[0]:e,x=t.clientX-r.left,y=t.clientY-r.top;if(x<0||y<0||x>r.width||y>r.height)return;const s=stickers[chosen],el=document.createElement('span');el.className='sticker'+(s.type==='emoji'?' emoji':'');el.style.setProperty('--rot',(Math.random()*40-20)+'deg');el.innerHTML=s.type==='img'?`<img src="${s.src}" alt="">`:s.ch;el.style.left=x+'px';el.style.top=y+'px';stage.appendChild(el);count++;beep(840,.06,'sine',.08)}
     stage.addEventListener('click',place);stage.addEventListener('touchstart',e=>{e.preventDefault();place(e)},{passive:false});
     body.querySelector('#undo').onclick=()=>{const all=stage.querySelectorAll('.sticker');if(all.length){all[all.length-1].remove();count--}};
@@ -427,8 +514,17 @@ games.decorate=()=>openModal('decore a foto',body=>{
 const msgList=document.getElementById('msgList'),msgInput=document.getElementById('msgInput'),msgSend=document.getElementById('msgSend'),msgWhoBtn=document.getElementById('msgWhoToggle'),msgWhoLabel=document.getElementById('msgWhoLabel');
 let who=localStorage.getItem('hesadora_who')||'hesa';msgWhoLabel.textContent=who;
 msgWhoBtn.onclick=()=>{who=who==='hesa'?'eu':'hesa';msgWhoLabel.textContent=who;localStorage.setItem('hesadora_who',who);beep(700,.06,'sine',.08)};
-function loadMsgs(){try{return JSON.parse(localStorage.getItem('hesadora_msgs')||'[]')}catch(e){return[]}}
-function saveMsgs(arr){localStorage.setItem('hesadora_msgs',JSON.stringify(arr))}
+function loadMsgs() {
+  try {
+    return JSON.parse(localStorage.getItem('hesadora_msgs') || '[]');
+  } catch (e) {
+    localStorage.removeItem('hesadora_msgs');
+    return [];
+  }
+}
+function saveMsgs(arr) {
+  localStorage.setItem('hesadora_msgs', JSON.stringify(arr));
+}
 function renderMsgs(){const arr=loadMsgs();if(!arr.length){msgList.innerHTML='<div class="msg-empty">nenhum recadinho ainda 🥺</div>';return}msgList.innerHTML='';arr.slice().reverse().forEach((m,revIdx)=>{const realIdx=arr.length-1-revIdx;const d=new Date(m.t),when=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});const el=document.createElement('div');el.className='msg-item';el.innerHTML=`<div class="when">${when}</div><div><span class="who">${m.w||'hesa'}:</span>${(m.text||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div><button class="x" aria-label="apagar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;el.querySelector('.x').onclick=()=>{const a=loadMsgs();a.splice(realIdx,1);saveMsgs(a);renderMsgs()};msgList.appendChild(el)})}
 msgSend.onclick=()=>{const t=msgInput.value.trim();if(!t)return;const arr=loadMsgs();arr.push({t:Date.now(),w:who,text:t.slice(0,500)});saveMsgs(arr);msgInput.value='';renderMsgs();beep(880,.12,'triangle',.1);for(let i=0;i<6;i++)bursts.push({x:innerWidth/2,y:innerHeight/2,vx:(Math.random()-.5)*4,vy:(Math.random()-.9)*4,life:36,h:330+Math.random()*30})};
 renderMsgs();
